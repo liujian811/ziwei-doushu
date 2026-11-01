@@ -81,3 +81,5 @@ curl --fail --output /dev/null http://127.0.0.1:3080/
 比较返回的版本标记与选定 SHA，并再做公网检查。`previous` 保留上一发布指针；手动回滚前记录当前与 previous，避免丢失恢复依据。如首次部署无可用版本，管理员可 `systemctl stop ziwei-doushu.service`，修复后提交新 SHA 再部署。
 
 已成功发布的相同 SHA 不能通过重跑任务覆盖；需要重新构建时创建新提交。某个 SHA 首次发布失败而目录已保留时，先修复原因并创建新提交，或由管理员把失败目录移至独立备份位置后重跑。若本地发布包丢失，可从对应 GitHub Actions run 下载保存期内的 artifact，校验 SHA256，并使用相同的受限 SSH 命令上传；保留期以外从原提交重新构建。服务器上的现有 release 不随 Actions artifact 到期删除。
+
+GitHub 到服务器的上传链路可能较慢，作业超时设为 40 分钟。必要时可先下载同一 run 保存的 artifact 并校验 SHA256，再由管理员使用同一接收脚本、以 `ziwei` 身份发布；先取消该 run 的上传并确认部署锁已释放，禁止并发覆盖。记录原 run 的检查结果、人工交付原因及上线 SHA，不能将取消的 workflow 报告为完整成功。

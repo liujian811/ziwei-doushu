@@ -16,7 +16,7 @@ jobs:
   deploy:
     if: github.repository == 'liujian811/ziwei-doushu' && github.ref == 'refs/heads/codex/server-deployment'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL }}
       NEXT_TELEMETRY_DISABLED: '1'
