@@ -1,0 +1,84 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: [codex/server-deployment]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ziwei-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'liujian811/ziwei-doushu' && github.ref == 'refs/heads/codex/server-deployment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL }}
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Validate site URL
+        run: |
+          node - <<'JS'
+          const value = process.env.NEXT_PUBLIC_SITE_URL;
+          if (!value) throw new Error('Repository variable SITE_URL is required');
+          const url = new URL(value);
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+              url.pathname !== '/' || url.search || url.hash) {
+            throw new Error('SITE_URL must be an HTTP(S) origin without credentials, path, query or fragment');
+          }
+          JS
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Package standalone release
+        run: |
+          set -euo pipefail
+          test -f .next/standalone/server.js
+          mkdir -p .next/standalone/.next .next/standalone/public
+          cp -a .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -a public/. .next/standalone/public/; fi
+          printf '%s\n' "$GITHUB_SHA" > .next/standalone/public/deployment-revision.txt
+          tar --hard-dereference -C .next/standalone -czf release.tar.gz .
+          sha256sum release.tar.gz > release.tar.gz.sha256
+      - name: Retain release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ziwei-${{ github.sha }}
+          path: |
+            release.tar.gz
+            release.tar.gz.sha256
+          retention-days: 14
+      - name: Deploy through restricted SSH command
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" && test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo 'Invalid SSH_HOST'; exit 1; }
+          install -m 700 -d "$RUNNER_TEMP/ziwei-ssh"
+          trap 'rm -rf "$RUNNER_TEMP/ziwei-ssh"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ziwei-ssh/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/ziwei-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ziwei-ssh/"*
+          ssh -T -i "$RUNNER_TEMP/ziwei-ssh/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/ziwei-ssh/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+            "ziwei@$SSH_HOST" "deploy $GITHUB_SHA" < release.tar.gz

@@ -1,0 +1,4 @@
+# Install as /etc/sudoers.d/ziwei-doushu, root:root, mode 0440.
+# Validate with visudo -cf before installing.
+ziwei ALL=(root) NOPASSWD: /usr/bin/systemctl restart ziwei-doushu.service
+ziwei ALL=(root) NOPASSWD: /usr/bin/systemctl stop ziwei-doushu.service
