@@ -1,5 +1,9 @@
 # 服务器部署
 
+临时入口采用 `https://115.190.128.235`，设置页为 `/settings`。火山引擎控制台登录恢复后，再添加 `ziwei.tjyouzan.com` 的 A 记录并签发域名证书。切换正式域名时将 GitHub `SITE_URL` 改为正式 HTTPS origin 并重新构建；不要同时从两个 origin 提交配置。
+
+IP 证书使用独立 `/opt/ziwei-certbot`（Certbot/ACME 5.4.0）与 `/etc/letsencrypt-ziwei`，不升级旧站点的 Certbot。`ziwei-cert-renew.timer` 每日两次检查短期证书续期。IP 的 HTTP 80 原业务保留，仅增加 `/.well-known/acme-challenge/` 校验路径；HTTPS 443 的 IP 入口由 `deploy/nginx-ip.conf` 提供，其他域名仍按原虚拟主机处理。恢复材料位于 `/var/backups/ziwei-doushu/ip-entry-20261101`。
+
 本项目通过 `liujian811/ziwei-doushu` 的 `codex/server-deployment` 分支发布。推送该分支或在该分支手动运行 `Deploy to server` 会依次安装锁定依赖、执行类型检查与排盘回归、构建 Next.js standalone、保留发布包并通过 SSH 上传服务器。
 
 ## 应用边界

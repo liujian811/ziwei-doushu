@@ -1,0 +1,7 @@
+[Unit]
+Description=Renew Ziwei temporary IP HTTPS certificate
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ziwei-certbot/bin/certbot renew --config-dir /etc/letsencrypt-ziwei --work-dir /var/lib/letsencrypt-ziwei --logs-dir /var/log/letsencrypt-ziwei --cert-name ziwei-ip --quiet --deploy-hook "/usr/sbin/nginx -t && /usr/bin/systemctl reload nginx"
