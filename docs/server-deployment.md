@@ -60,7 +60,7 @@ SSH 用户固定为 `ziwei`。`NEXT_PUBLIC_SITE_URL` 在构建时写入应用，
 
 发布前 `previous` 指向原 `current`。切换通过原子替换 `current` 符号链接完成，然后重启服务。健康检查同时要求首页 HTTP 成功及 `/deployment-revision.txt` 等于目标 SHA，避免将旧版本响应误认为发布成功。失败自动切回原版本并再次检查。失败版本目录保留供排错，不自动清理其他版本。
 
-管理员确认 `systemctl status ziwei-doushu`、`journalctl -u ziwei-doushu -n 100 --no-pager`，并核对公网首页、`/chart`、`/library`、`/heming`、sitemap。浏览器实际生成一张命盘、打开宫位、切换本命/大限/流年、测试古籍搜索，并确认缺失的 AI 接口给出开源版提示。HTTP 健康检查不替代这些功能验收。
+管理员确认 `systemctl status ziwei-doushu`、`journalctl -u ziwei-doushu -n 100 --no-pager`，并核对公网首页、`/chart`、`/library`、`/heming`、sitemap。浏览器实际生成一张命盘、打开宫位、切换本命/大限/流年、测试古籍搜索，再登录模型设置页确认已保存配置，使用虚构命盘分别验证单盘与合盘的流式响应正常完成、退出后模型接口拒绝匿名调用。HTTP 健康检查不替代这些功能验收。
 
 ## 恢复与排错
 
