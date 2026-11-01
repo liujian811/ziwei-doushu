@@ -2,6 +2,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
+import { AiRequestError, aiErrorMessage, consumeAiStream } from '@/lib/client/ai-stream';
+import { useAiSession } from '@/lib/client/use-ai-session';
+import { prepareAiMessages } from '@/lib/client/ai-history';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,6 +29,10 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const [error, setError] = useState('');
+  const session = useAiSession();
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -34,59 +41,39 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
   }, [messages]);
 
   const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return;
+    if (!text.trim() || requestRef.current) return;
+    if (!session.authenticated) { setError('请先登录后使用 AI 解读。'); return; }
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setError('');
     const userMsg: Message = { role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
-
     try {
       const res = await fetch('/api/interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart, messages: [...messages, userMsg] }),
+        body: JSON.stringify({ chart, messages: prepareAiMessages([...messages, userMsg]) }),
+        signal: controller.signal,
       });
-
-      if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('请求失败');
-      if (!res.body) throw new Error('无响应流');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = '';
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              const delta = parsed.delta?.text ?? '';
-              assistantText += delta;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-                return updated;
-              });
-            } catch { /* skip */ }
-          }
-        }
-      }
+      let started = false;
+      await consumeAiStream(res, assistantText => {
+        const replaceLast = started;
+        setMessages(prev => replaceLast
+          ? [...prev.slice(0, -1), { role: 'assistant', content: assistantText }]
+          : [...prev, { role: 'assistant', content: assistantText }]);
+        started = true;
+      }, controller.signal);
     } catch (e) {
-      const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: missing ? '开源版不含 AI 解读接口（/api/interpret），需要你自己实现后才能用，详见 README「快速开始」。排盘本身不需要任何 API Key。' : '解读失败，请检查API配置或稍后重试。',
-      }]);
+      if (controller.signal.aborted) return;
+      if (e instanceof AiRequestError && e.status === 401) session.requireLogin();
+      setError(aiErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoading(false);
+      }
     }
   };
 
@@ -95,9 +82,16 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
       {/* 标题 */}
       <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--t-border)' }}>
         <h3 className="text-xs font-medium tracking-widest" style={{ color: 'var(--t-gold)' }}>AI 命盘解读</h3>
-        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>倪海厦正宗紫微斗数 · 智慧解析</p>
+        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>命盘文化解读 · 由你配置的模型生成</p>
       </div>
 
+      <div className="px-4 py-2 text-[11px] space-y-2" style={{ color: 'var(--t-text2)' }}>
+        <p>点击解读会将命盘星曜和对话发送给已配置的模型；不会发送姓名。请勿在提问中填写敏感信息。较长对话仅发送最近内容的节选。</p>
+        <a href="/settings" target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--t-gold)' }}>
+          {session.authenticated ? '模型设置' : '登录并配置模型'}
+        </a>
+        {error && <p role="alert" style={{ color: '#ef9a84' }}>{error}</p>}
+      </div>
       {/* 消息列表 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {messages.length === 0 && (
@@ -153,7 +147,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
               <button
                 key={i}
                 onClick={() => sendMessage(q)}
-                disabled={loading}
+                disabled={loading || !session.authenticated}
                 className="text-left text-[10px] rounded-lg px-2.5 py-2 transition-all line-clamp-2"
                 style={{
                   color: 'var(--t-text2)',
@@ -185,7 +179,8 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(input)}
             placeholder="输入问题，如：我的感情运势如何？"
-            disabled={loading}
+            maxLength={2000}
+            disabled={loading || !session.authenticated}
             className="flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none transition-colors"
             style={{
               background: 'var(--t-card)',
@@ -195,7 +190,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
           />
           <button
             onClick={() => sendMessage(input)}
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || !session.authenticated}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(212,168,67,0.15)',

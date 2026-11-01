@@ -4,7 +4,17 @@
 
 ## 应用边界
 
-开源排盘、命盘展示、合盘起盘和古籍阅读可直接运行，不需要数据库、Redis 或 AI Key。上游没有提供 `/api/interpret`、`/api/heming`、用户系统、支付和完整断语库；配置模型 Key 不会自动补齐接口。大型解读数据集为独立资源，正常安装不需要下载。
+排盘、命盘展示、合盘起盘和古籍阅读可直接运行，不需要数据库或 Redis。本 Fork 在上游基础上新增 `/api/interpret`、`/api/heming` 与 `/settings`，接入 OpenAI-compatible Chat Completions 模型。上游完整断语库、会员与支付不包含在本项目中；AI 解释由配置的模型实时生成。大型数据集无需下载。
+
+## 模型与管理员配置
+
+首页“模型设置”进入 `/settings`。管理员密码登录后，可配置 API 基础地址（含 `/v1`）、模型名、API Key、温度、最大输出 tokens 和超时，保存后可以测试已保存配置。API Key 留空保留旧值，不从服务器读回。AI 解读与合盘均需登录，明确点击才调用模型。
+
+服务器 `/etc/ziwei-doushu.env` 为 root:root、0600，设置 `ZIWEI_ADMIN_PASSWORD`（至少16字符）、`ZIWEI_SESSION_SECRET`（至少32字符）、`ZIWEI_CONFIG_DIR=/var/lib/ziwei-doushu`。独立随机生成密码与会话密钥，禁止进入 Git。需要复用既有公网 HTTP 网关时设置 `ZIWEI_ALLOW_HTTP_MODEL=1`，其他情况优先 HTTPS。
+
+创建 `/var/lib/ziwei-doushu`，属主 ziwei:ziwei、0700；`model.json` 由应用原子写入、0600，服务单元已允许该目录写入。发布和回滚不覆盖此目录。管理员密码轮换需编辑环境文件并重启专用服务，旧会话随后失效。默认会话8小时；鉴权同时保护配置和付费模型调用，配置登录入口请使用 HTTPS。
+
+当前接入使用服务器已有的 `lzclaw / gpt-6-sol`，凭据只在服务器内部复用，原应用配置不变。请求发给所配置服务商的内容为必要命盘结构与对话，排除命盘姓名及城市；请勿在对话中输入不必要的个人信息。上游错误、输出截断和超时会明确提示，不当作完整成功。服务端限制请求大小、每分钟请求和全局并发2。
 
 ## 一次性服务器准备
 

@@ -3,6 +3,9 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
+import { AiRequestError, aiErrorMessage, consumeAiStream } from '@/lib/client/ai-stream';
+import { useAiSession } from '@/lib/client/use-ai-session';
+import { prepareAiMessages } from '@/lib/client/ai-history';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -189,7 +192,12 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
   const [activeTopic, setActiveTopic] = useState<string>('overview');
   const messagesRef = useRef<Message[]>([]); // always-current copy for closures
   const loadingRef = useRef(false);
-  const autoLoaded = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const [error, setError] = useState('');
+  const [pendingPrompt, setPendingPrompt] = useState(TOPIC_PROMPTS.overview);
+  const [pendingLabel, setPendingLabel] = useState('开始 AI 解读');
+  const session = useAiSession();
+  useEffect(() => () => requestRef.current?.abort(), []);
   const lastPalaceBranch = useRef<number | undefined>(undefined);
   const lastSiHuaKey = useRef<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -204,13 +212,6 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  // Auto-generate 命格总览 on mount
-  useEffect(() => {
-    if (autoLoaded.current) return;
-    autoLoaded.current = true;
-    sendMessage(TOPIC_PROMPTS.overview, true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Inject palace analysis when palace selected
   useEffect(() => {
@@ -237,7 +238,8 @@ ${selectedPalace.name}在命盘中的意义，以及这种星曜配置的整体�
 **【实际建议】**
 基于此宫的具体建议。`;
 
-    sendMessage(prompt, true);
+    setPendingPrompt(prompt);
+    setPendingLabel(`解读${selectedPalace.name}`);
   }, [selectedPalace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 注入四化飞化分析
@@ -271,65 +273,52 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
 **【实际建议】**
 基于此四化的具体可操作建议。`;
 
-    sendMessage(prompt, true);
+    setPendingPrompt(prompt);
+    setPendingLabel(`解读${selectedSiHua.starName}化${selectedSiHua.siHua}`);
   }, [selectedSiHua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const streamResponse = async (apiMessages: { role: 'user' | 'assistant'; content: string }[]) => {
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       const res = await fetch('/api/interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chart, messages: apiMessages }),
+        signal: controller.signal,
       });
-      if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('请求失败');
-      if (!res.body) throw new Error('无响应流');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = '';
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const delta = JSON.parse(data).delta?.text ?? '';
-            assistantText += delta;
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-              return updated;
-            });
-          } catch { /* skip */ }
-        }
-      }
+      let started = false;
+      await consumeAiStream(res, assistantText => {
+        const replaceLast = started;
+        setMessages(prev => replaceLast
+          ? [...prev.slice(0, -1), { role: 'assistant', content: assistantText }]
+          : [...prev, { role: 'assistant', content: assistantText }]);
+        started = true;
+      }, controller.signal);
     } catch (e) {
-      const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, { role: 'assistant', content: missing ? '开源版不含 AI 解读接口（/api/interpret），需要你自己实现后才能用，详见 README「快速开始」。排盘本身不需要任何 API Key。' : '解读失败，请稍后重试。' }]);
+      if (controller.signal.aborted) return;
+      if (e instanceof AiRequestError && e.status === 401) session.requireLogin();
+      setError(aiErrorMessage(e));
     } finally {
-      setLoading(false);
-      loadingRef.current = false;
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
   };
 
   const sendMessage = (text: string, hidden = false) => {
     if (!text.trim() || loadingRef.current) return;
+    if (!session.authenticated) { setError('请先登录后使用 AI 解读。'); return; }
+    setError('');
+    setPendingPrompt('');
     loadingRef.current = true;
     setLoading(true);
 
     const userMsg: Message = { role: 'user', content: text, hidden };
     // Capture current messages synchronously via ref (avoids stale closure)
-    const apiMessages = [...messagesRef.current, userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const apiMessages = prepareAiMessages([...messagesRef.current, userMsg]);
 
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -358,7 +347,7 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
               <button
                 key={t.key}
                 onClick={() => handleTopicClick(t.key)}
-                disabled={loading}
+                disabled={loading || !session.authenticated}
                 className="py-1.5 text-[10px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
                 style={{
                   background: isActive ? 'rgba(212,168,67,0.12)' : 'transparent',
@@ -373,6 +362,18 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
         </div>
       </div>
 
+      <div className="px-3 py-2 text-[11px] space-y-2" style={{ color: 'var(--t-text2)' }}>
+        <p>点击解读会将命盘星曜和对话发送给已配置的模型；不会发送姓名。请勿在提问中填写敏感信息。较长对话仅发送最近内容的节选。</p>
+        <a href="/settings" target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--t-gold)' }}>
+          {session.authenticated ? '模型设置' : '登录并配置模型'}
+        </a>
+        {session.checking && <span className="ml-2">正在检查登录…</span>}
+        {pendingPrompt && <div><button type="button" disabled={loading || !session.authenticated}
+          className="rounded-lg border px-3 py-2 disabled:opacity-40" style={{ borderColor: 'var(--t-border)', color: 'var(--t-gold)' }}
+          onClick={() => sendMessage(pendingPrompt, true)}>{pendingLabel}</button></div>}
+        {error && <p role="alert" style={{ color: '#ef9a84' }}>{error}</p>}
+      </div>
+
       {/* ── Messages ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
 
@@ -380,7 +381,7 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-4xl mb-3" style={{ color: 'var(--t-gold)', opacity: 0.1 }}>✦</div>
-            <p className="text-[10px] animate-pulse" style={{ color: 'var(--t-faint)' }}>命格解读生成中…</p>
+            <p className="text-[11px]" style={{ color: 'var(--t-faint)' }}>命盘已生成，登录后点击按钮开始解读。</p>
           </div>
         )}
 
@@ -441,7 +442,8 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
             placeholder="继续追问，如：今年适合换工作吗？"
-            disabled={loading}
+            disabled={loading || !session.authenticated}
+            maxLength={2000}
             className="flex-1 rounded-lg px-3 py-2 text-[11px] focus:outline-none transition-colors"
             style={{
               background: 'var(--t-card)',
@@ -451,7 +453,7 @@ ${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，�
           />
           <button
             onClick={handleSend}
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || !session.authenticated}
             className="px-3 py-2 rounded-lg text-[11px] font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(212,168,67,0.15)',
