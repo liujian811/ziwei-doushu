@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // 公告版本号——以后想再弹新公告，改这里就行（旧版 key 失效，新版重新弹一次）
-const ANNOUNCEMENT_VERSION = '2026-05-01';
+const ANNOUNCEMENT_VERSION = '2026-11-01-model-settings';
 const STORAGE_KEY = `announcement_seen_${ANNOUNCEMENT_VERSION}`;
 
 export default function AnnouncementModal() {
@@ -106,7 +106,7 @@ export default function AnnouncementModal() {
               >×</button>
             </div>
 
-            {/* 限时免费 banner（最关键信息，置顶强调）*/}
+            {/* 模型接入与使用说明 */}
             <div style={{
               margin: '14px 22px 0',
               padding: '12px 16px',
@@ -117,12 +117,12 @@ export default function AnnouncementModal() {
               textAlign: 'center',
             }}>
               <div style={{ fontSize: '10px', letterSpacing: '0.3em', color: '#c45a2d', marginBottom: '4px', fontWeight: 600 }}>
-                LIMITED TIME · 限时回馈
+                YOUR MODEL · 自有模型接入
               </div>
               <div style={{ fontSize: '14px', color: '#8b3a1a', fontWeight: 600, lineHeight: 1.6 }}>
-                <span style={{ fontSize: '16px', color: '#c45a2d', fontWeight: 700 }}>5 月 1 日 — 5 月 8 日</span>
+                <span style={{ fontSize: '16px', color: '#c45a2d', fontWeight: 700 }}>AI 解读 · 登录后使用</span>
                 <br />
-                平台全部功能 + AI 提问 全部免费开放
+                AI 用量按模型服务商计费
               </div>
             </div>
 
@@ -136,10 +136,10 @@ export default function AnnouncementModal() {
               flex: 1,
             }}>
               <p style={{ margin: '0 0 12px' }}>
-                说实话，我真的没想到会有这么大的流量。
+                本站已接入可配置的 AI 模型，用于命盘解读与合盘分析。
               </p>
               <p style={{ margin: '0 0 12px' }}>
-                最开始做这个平台，我的初心其实很简单：在 AI 时代，把倪师这套原本复杂、门槛很高的体系，尽量做得更简单、更高效、更容易理解。
+                排盘使用开源引擎，生成命盘无需登录。AI 解读需要管理员登录，点击首页「模型设置」即可配置模型地址、名称与密钥。
               </p>
               <p style={{ margin: '0 0 12px' }}>
                 不一定每个人都要先学很久、看很多书，才能接触这些内容。我们希望通过这个平台，让大家用更轻松的方式，获得一些对自我、人生阶段、选择方向的参考和启发。
@@ -162,7 +162,7 @@ export default function AnnouncementModal() {
                 至于那些说&ldquo;你当下在看这些，其实也是命运的一部分&rdquo;之类的话，我就不多评价了。
               </p>
               <p style={{ margin: '0 0 12px' }}>
-                这几天账号被小红书抬走了，<strong style={{ color: '#c45a2d' }}>5 月 3 号开始恢复正常更新。</strong>
+                AI 解读在你点击按钮后才会调用模型，<strong style={{ color: '#c45a2d' }}>请求用量与费用以模型服务商的账单为准。</strong>
               </p>
               <p style={{ margin: '0 0 16px', color: '#3d2f10', fontWeight: 500 }}>
                 最后，真心祝愿大家都能越来越了解自己，越来越爱自己，也越来越有能力爱身边的人。

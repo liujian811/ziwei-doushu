@@ -113,7 +113,7 @@ const FEATURES = [
   {
     tag: 'AI 解读',
     title: '深度解盘\n不止于算',
-    subtitle: '倪海厦体系知识库 × Claude AI',
+    subtitle: '命盘星曜信息 × 你配置的 AI 模型',
     points: [
       '命格分析：从命宫主星出发，结合三方四正，给出全面的性格与人生格局判断',
       '六大维度解读：事业方向、感情婚姻、财运模式、健康注意、家庭关系、子女缘分',
@@ -611,12 +611,12 @@ export default function HomePage() {
           }}>
             <div style={{ fontSize: '20px', marginBottom: '6px', lineHeight: 1 }}>🎁</div>
             <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '14px' }}>5/1 — 5/8</span>
-              <span> 限时回馈</span>
+              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '14px' }}>自有模型接入</span>
+              <span> 登录后使用</span>
             </div>
             <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              全部功能 + AI 提问
-              <strong style={{ color: '#c45a2d' }}> 全免费</strong>
+              AI 解读用量
+              <strong style={{ color: '#c45a2d' }}> 按模型服务商计费</strong>
             </div>
           </div>
         </motion.div>
@@ -642,11 +642,11 @@ export default function HomePage() {
           }}>
             <div style={{ fontSize: '18px', marginBottom: '4px', lineHeight: 1 }}>🎁</div>
             <div style={{ fontSize: '12px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '13px' }}>5/1 — 5/8</span>
-              <span> 限时回馈</span>
+              <span style={{ color: '#c45a2d', fontWeight: 700, fontSize: '13px' }}>自有模型接入</span>
+              <span> 登录后使用</span>
             </div>
             <div style={{ fontSize: '12px', lineHeight: 1.7, color: '#8b3a1a', fontWeight: 500 }}>
-              全部功能 + AI <strong style={{ color: '#c45a2d' }}>全免费</strong>
+              AI 解读用量<strong style={{ color: '#c45a2d' }}>按模型服务商计费</strong>
             </div>
           </div>
         </motion.div>
@@ -1097,7 +1097,7 @@ export default function HomePage() {
           </h2>
           <p className="text-sm mb-10 max-w-md mx-auto leading-relaxed" style={{ color: c.textSecond }}>
             输入出生年月日时，在几秒内生成你的专属命盘<br />
-            再由 AI 按倪海厦体系为你深度解读
+            登录后可使用已配置的模型进行 AI 解读
           </p>
           <motion.button
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
